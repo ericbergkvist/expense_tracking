@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use log::{debug, info, trace};
 use std::error::Error;
 use std::rc::Rc;
-use std::{collections::BTreeSet, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
@@ -14,7 +14,7 @@ use crate::transaction::{
 /// A struct that deals with expense tracking.
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ExpenseTracker {
-    pub valid_categories: BTreeSet<Rc<Category>>,
+    pub valid_categories: BTreeMap<String, Rc<Category>>,
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
     pub transactions: Vec<Transaction>,
@@ -24,17 +24,14 @@ impl ExpenseTracker {
     /// Creates a new `ExpenseTracker` object.
     pub fn new() -> Self {
         ExpenseTracker {
-            valid_categories: BTreeSet::new(),
+            valid_categories: BTreeMap::new(),
             transactions: Vec::new(),
         }
     }
 
     /// Returns an `Option` which contains a reference to a `Category` if it matches the argument.
     pub fn get_category(&self, category_name: &str) -> Option<Rc<Category>> {
-        self.valid_categories
-            .iter()
-            .find(|category| category.name == category_name.to_lowercase())
-            .cloned()
+        self.valid_categories.get(category_name).cloned()
     }
 
     /// Returns an `Option` which contains a reference to a `SubCategory` if it matches the
@@ -44,11 +41,7 @@ impl ExpenseTracker {
         category: Rc<Category>,
         subcategory_name: &str,
     ) -> Option<Rc<SubCategory>> {
-        category
-            .subcategories
-            .iter()
-            .find(|subcategory| subcategory.name == subcategory_name.to_lowercase())
-            .cloned()
+        category.subcategories.get(subcategory_name).cloned()
     }
 
     /// Resolves the references to objects (i.e. `Category` and `SubCategory`) in a
@@ -101,15 +94,14 @@ impl ExpenseTracker {
         }
     }
 
-    /// Adds a valid category if it doesn't exist yet.
-    pub fn add_category(&mut self, category_name: &str, date_creation: Option<NaiveDate>) -> bool {
+    /// Adds a valid category.
+    pub fn add_category(&mut self, category_name: &str, date_creation: Option<NaiveDate>) {
         // Check whether a category with the same name exists (case insensitive)
         if let Some(found_category) = self.get_category(category_name) {
             debug!(
                 "Cannot add Category as one with the same name already exists: {:?}",
                 found_category
             );
-            return false;
         }
 
         let category_date: NaiveDate = match date_creation {
@@ -122,9 +114,10 @@ impl ExpenseTracker {
             // All category names are lower case to avoid any confusion
             name: category_name.to_lowercase(),
             date_added: category_date,
-            subcategories: BTreeSet::new(),
+            subcategories: BTreeMap::new(),
         });
-        self.valid_categories.insert(new_category)
+        self.valid_categories
+            .insert(new_category.name, new_category);
     }
 
     /// Adds a valid sub-category associated with a category if it doesn't exist yet and if the
@@ -149,13 +142,6 @@ impl ExpenseTracker {
             return Err("The subcategory name already exists".into());
         }
 
-        // We are in the situation where the sub-category needs to be added to the category.
-        // As the elements in a `BTreeSet` can by default not be modified, we need to remove
-        // the `Category` object, modify it, and insert it again
-
-        // Safe to unwrap because the category exists if the code arrives here
-        let mut extracted_category = self.valid_categories.take(&category).unwrap();
-
         let subcategory_date: NaiveDate = match date_creation {
             Some(date) => date,
             // If no date was used as an input, use today's date
@@ -167,9 +153,9 @@ impl ExpenseTracker {
             date_added: subcategory_date,
         });
 
-        extracted_category.subcategories.insert(new_subcategory);
-
-        self.valid_categories.insert(extracted_category);
+        category
+            .subcategories
+            .insert(new_subcategory.name, new_subcategory);
 
         Ok(())
     }
@@ -350,7 +336,7 @@ mod tests {
         let category = Category {
             name: "Nourriture".to_lowercase(),
             date_added: NaiveDate::default(),
-            subcategories: BTreeSet::new(),
+            subcategories: BTreeMap::new(),
         };
         assert_eq!(
             expense_tracker.valid_categories.pop_first().unwrap(),
@@ -372,7 +358,7 @@ mod tests {
         let mut category = Category {
             name: "Nourriture".to_lowercase(),
             date_added: NaiveDate::default(),
-            subcategories: BTreeSet::new(),
+            subcategories: BTreeMap::new(),
         };
         let subcategory = SubCategory {
             name: "Courses".to_lowercase(),

@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use core::f32;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
 
@@ -87,7 +87,7 @@ impl TryFrom<TransactionCsv> for TransactionParsed {
 #[derive(Debug, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct Category {
     pub name: String,
-    pub subcategories: BTreeSet<Rc<SubCategory>>,
+    pub subcategories: BTreeMap<String, Rc<SubCategory>>,
     pub date_added: NaiveDate,
 }
 
@@ -106,7 +106,7 @@ impl Category {
         Category {
             name: name.to_lowercase(),
             date_added: NaiveDate::default(),
-            subcategories: BTreeSet::new(),
+            subcategories: BTreeMap::new(),
         }
     }
 }
